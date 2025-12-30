@@ -1,0 +1,18 @@
+# Minimal requirements for ICL Tutorial
+# ======================================
+#
+# This file contains the minimum dependencies needed to run the
+# In-Context Learning (ICL) tutorial script.
+#
+# Install with: pip install -r requirements_icl.txt
+
+# Core dependencies
+torch>=2.0.0                  # PyTorch for deep learning
+transformers>=4.40.0          # Hugging Face Transformers for LLM loading
+
+# Optional but recommended
+accelerate>=0.20.0            # For efficient model loading with device_map="auto"
+
+# For 4-bit quantization (optional, saves GPU memory)
+# Uncomment if you want to use load_in_4bit=True
+# bitsandbytes>=0.40.0
