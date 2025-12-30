@@ -24,6 +24,13 @@ except ImportError:
     print("")
 
 
+def _get_model_device(model):
+    """Helper function to get the device of a model (handles multi-device case)."""
+    if hasattr(model, 'device'):
+        return model.device
+    return next(model.parameters()).device
+
+
 # ==============================================================================
 # STEP 1: Load the LLM Model
 # ==============================================================================
@@ -43,19 +50,26 @@ def load_llm_model(model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
         model: The loaded language model
         tokenizer: The corresponding tokenizer
     
+    Notes:
+        - Uses bfloat16 precision which requires modern GPUs (e.g., Ampere or newer).
+          For older GPUs, consider using torch_dtype=torch.float16.
+        - Uses left padding which is required for causal LMs during generation.
+        - With device_map="auto", model may be split across multiple devices.
+    
     Example:
         >>> model, tokenizer = load_llm_model("meta-llama/Meta-Llama-3.1-8B-Instruct")
     """
     print(f"Loading model: {model_name}")
     
     # Load the tokenizer (converts text to tokens and vice versa)
+    # Left padding is required for causal language models during generation
     tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
     
     # Set pad token (required for batch processing)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
-    # Load the model
+    # Load the model with bfloat16 precision (requires modern GPUs)
     if load_in_4bit:
         # 4-bit quantization for memory efficiency (requires bitsandbytes library)
         model = AutoModelForCausalLM.from_pretrained(
@@ -74,7 +88,13 @@ def load_llm_model(model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
     # Set pad token id in model config
     model.config.pad_token_id = tokenizer.pad_token_id
     
-    print(f"Model loaded successfully on device: {model.device}")
+    # Get device info for display (handle multi-device case)
+    if hasattr(model, 'hf_device_map'):
+        device_info = f"devices: {set(model.hf_device_map.values())}"
+    else:
+        device_info = f"device: {next(model.parameters()).device}"
+    
+    print(f"Model loaded successfully on {device_info}")
     return model, tokenizer
 
 
@@ -122,8 +142,9 @@ def predict_without_icl(model, tokenizer, question: str,
         add_generation_prompt=True
     )
     
-    # Tokenize the prompt
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    # Tokenize the prompt and move to model's device
+    device = _get_model_device(model)
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
     
     # Generate response
     with torch.no_grad():
@@ -209,8 +230,9 @@ def predict_with_icl(model, tokenizer, question: str,
         add_generation_prompt=True
     )
     
-    # Tokenize the prompt
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    # Tokenize the prompt and move to model's device
+    device = _get_model_device(model)
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
     
     # Generate response
     with torch.no_grad():
